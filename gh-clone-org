@@ -4,13 +4,15 @@ set -e
 
 usage()
 {
-  echo "gh clone-org [-t TOPIC] [-s QUERY] [-p PATH] [-y] ORG"
+  echo "gh clone-org [-t TOPIC] [-s QUERY] [-p PATH] [-b PATH] [-y] ORG"
   echo "  ORG"
   echo "    Github organization. Required if the GITHUB_ORG environment variable is not set."
   echo "  -y, --yes"
   echo "    Clone without prompting for confirmation."
   echo "  -p, --path PATH"
   echo "    Clone path. Default: current directory."
+  echo "  -b, --binary PATH"
+  echo "    gh binary path to use. Default: gh."
   echo "  -t, --topic TOPIC"
   echo "    Clone repositories with this topic"
   echo "  -s --search QUERY"
@@ -56,6 +58,9 @@ do
     -p | --path ) shift
       CLONE_PATH="$1"
       ;;
+    -b | --binary ) shift
+      GH_PATH="$1"
+      ;;
     -s | --search ) shift
       SEARCH="$1"
       ;;
@@ -77,6 +82,11 @@ then
   exit 1
 fi
 
+if [ -z "$GH_PATH" ]
+then
+    GH_PATH=gh;
+fi
+
 JQ_QUERY='.items[].full_name'
 QUERY="search/repositories?q=org%3A$GITHUB_ORG"
 if [ -n "$SEARCH" ]
@@ -89,7 +99,7 @@ else
   # The search api only returns up to 1000 items. If no additional search params are provided we should
   # use the orgs or users apis so we can get everything.
   JQ_QUERY='.[].full_name'
-  if [ "$(gh api "users/$GITHUB_ORG" -q '.type')" = "Organization" ]
+  if [ "$($GH_PATH api "users/$GITHUB_ORG" -q '.type')" = "Organization" ]
   then
     QUERY="orgs/$GITHUB_ORG/repos"
   else
@@ -98,7 +108,7 @@ else
 fi
 
 echo "Retrieving the list of repositories: $QUERY"
-REPOS=$(gh api --paginate "$QUERY" -q "$JQ_QUERY")
+REPOS=$($GH_PATH api --paginate "$QUERY" -q "$JQ_QUERY")
 
 if [ -z "$REPOS" ]
 then
@@ -152,10 +162,10 @@ do
   then
     echo "'$d' already exists, attempting to checkout the default branch and pull"
     cd "$d"
-    default_branch="$(gh api "repos/$repo" -q '.default_branch')"
+    default_branch="$($GH_PATH api "repos/$repo" -q '.default_branch')"
     git checkout "$default_branch" && git pull
     cd ..
   else
-    gh repo clone "$repo"
+    $GH_PATH repo clone "$repo"
   fi
 done
